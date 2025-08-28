@@ -36,3 +36,9 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Claude files
+claude.md
+CLAUDE.md
+*claude*
+*CLAUDE*
