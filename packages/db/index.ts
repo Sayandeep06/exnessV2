@@ -1,5 +1,6 @@
 import { pool } from "./db";
 
+
 export async function createSchema() {
     await pool.query(`CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;`);
     await pool.query(`DROP TABLE IF EXISTS trades CASCADE;`);

@@ -17,7 +17,7 @@ const signinSchema = z.object({
 const users: any[] = []
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
-userRouter.post('/user/signup', async (req, res) => {
+userRouter.post('/signup', async (req, res) => {
     try {
         const data = signupSchema.safeParse(req.body)
         
@@ -55,7 +55,7 @@ userRouter.post('/user/signup', async (req, res) => {
     }
 })
 
-userRouter.post('/user/signin', async (req, res) => {
+userRouter.post('/signin', async (req, res) => {
     try {
         const data = signinSchema.safeParse(req.body)
         
@@ -89,7 +89,7 @@ userRouter.post('/user/signin', async (req, res) => {
     }
 })
 
-userRouter.get('/user/balance', async (req, res) => {
+userRouter.get('/balance', async (req, res) => {
     try {
         const authHeader = req.headers.authorization
         if (!authHeader || !authHeader.startsWith('Bearer ')) {

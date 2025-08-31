@@ -12,7 +12,7 @@ app.use(cors({
 }))
 app.use(express.json())
 
-app.use('/api/v1', userRouter)
+app.use('/api/v1/order', userRouter)
 app.use('/api/v1', orderRouter)
 app.use('/api/v1', klinesRouter)
 app.use('/api/v1', tickerRouter)
