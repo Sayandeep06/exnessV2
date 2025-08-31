@@ -1,39 +1,60 @@
 import express from 'express'
-export const orderRouter = express.Router()
 import { middleware } from '../middleware'
-// import {RedisClient} from '../RedisManager'
 
+export const orderRouter = express.Router()
 
-orderRouter.post('/order', middleware, async (req, res)=>{
-    try{
-        const { market, price, quantity, side, userId } = req.body;
-
-        // res.json(response);
-    }catch(error){
-        console.log(error)
-        res.json(error)
+orderRouter.post('/trade', middleware, async (req, res) => {
+    try {
+        const { asset, type, margin, leverage } = req.body
+        
+        res.status(200).json({
+            orderId: "uuid"
+        })
+    } catch (error) {
+        res.status(411).json({
+            message: "Incorrect inputs"
+        })
     }
 })
 
-orderRouter.get('/order', middleware, async (req, res)=>{
-    try{   
-        const market = req.query.market as string
-        const userId = req.userId as string
-
-        // res.json(response)
-    }catch(error){
-        res.json(error);
+orderRouter.get('/trades/open', middleware, async (req, res) => {
+    try {
+        res.status(200).json({
+            trades: [
+                {
+                    orderId: "uuid",
+                    type: "buy",
+                    margin: 50000,
+                    leverage: 10,
+                    openPrice: 1000000000
+                }
+            ]
+        })
+    } catch (error) {
+        res.status(500).json({
+            message: "Internal server error"
+        })
     }
 })
 
-orderRouter.post('/order:orderId', middleware, async (req, res)=>{
-    try{
-        const orderId = req.params.orderId as string;
-        const userId = req.userId as string;
-        const market = req.body.market as string;
-
-        // res.json(response)
-    }catch(error){
-        res.json(error)
+orderRouter.get('/trades', middleware, async (req, res) => {
+    try {
+        res.status(200).json({
+            trades: [
+                {
+                    orderId: "uuid",
+                    type: "buy",
+                    margin: 50000,
+                    leverage: 10,
+                    openPrice: 1000000000,
+                    closePrice: 2000000000,
+                    pnl: 500000
+                }
+            ]
+        })
+    } catch (error) {
+        res.status(500).json({
+            message: "Internal server error"
+        })
     }
 })
