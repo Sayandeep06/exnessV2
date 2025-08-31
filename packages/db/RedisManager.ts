@@ -1,16 +1,6 @@
 import {createClient} from 'redis';
 import {pool} from './db'
 
-// symbol TEXT NOT NULL,
-// trade_id BIGINT NOT NULL,
-// price NUMERIC(18,8) NOT NULL,
-// quantity NUMERIC(18,8) NOT NULL,
-// is_maker BOOLEAN NOT NULL,
-// event_time TIMESTAMPTZ NOT NULL,
-// trade_time TIMESTAMPTZ NOT NULL
-
-//need 1 min , 5min, 1hr, 1 day, 1 month
-
 export const pushToDB = async () => {
     const client = createClient()
     try {
@@ -18,7 +8,6 @@ export const pushToDB = async () => {
         console.log('Connected to Redis')
     } catch (error) {
         console.error('Failed to connect to Redis:', error)
-        process.exit(1)
     }
     
     while(true){
@@ -35,8 +24,7 @@ export const pushToDB = async () => {
                 console.log(`Inserted trade for ${data.symbol} at price ${data.price}`)
             }
         } catch (error) {
-
-            await new Promise(resolve => setTimeout(resolve, 5000))
+            console.log(error)
         }
     }
 }
