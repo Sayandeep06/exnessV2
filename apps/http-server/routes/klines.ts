@@ -24,3 +24,6 @@ klinesRouter.get('/candles', async (req, res) => {
         })
     }
 })
+
+
+//need to poll klines
