@@ -3,10 +3,9 @@ import { pool } from "./db";
 
 export async function createSchema() {
     await pool.query(`CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;`);
-    await pool.query(`DROP TABLE IF EXISTS trades CASCADE;`);
 
     await pool.query(`
-        CREATE TABLE trades (
+        CREATE TABLE IF NOT EXISTS trades (
             symbol TEXT NOT NULL,
             trade_id BIGINT NOT NULL,
             price NUMERIC(18,8) NOT NULL,
@@ -31,8 +30,7 @@ export async function createSchema() {
 export async function createKlineMaterializedViews() {
 
     await pool.query(`
-        DROP MATERIALIZED VIEW IF EXISTS klines_1m CASCADE;
-        CREATE MATERIALIZED VIEW klines_1m
+        CREATE MATERIALIZED VIEW IF NOT EXISTS klines_1m
         WITH (timescaledb.continuous) AS
         SELECT 
             symbol,
@@ -49,8 +47,7 @@ export async function createKlineMaterializedViews() {
     `);
 
     await pool.query(`
-        DROP MATERIALIZED VIEW IF EXISTS klines_5m CASCADE;
-        CREATE MATERIALIZED VIEW klines_5m
+        CREATE MATERIALIZED VIEW IF NOT EXISTS klines_5m
         WITH (timescaledb.continuous) AS
         SELECT 
             symbol,
@@ -67,8 +64,7 @@ export async function createKlineMaterializedViews() {
     `);
 
     await pool.query(`
-        DROP MATERIALIZED VIEW IF EXISTS klines_1h CASCADE;
-        CREATE MATERIALIZED VIEW klines_1h
+        CREATE MATERIALIZED VIEW IF NOT EXISTS klines_1h
         WITH (timescaledb.continuous) AS
         SELECT 
             symbol,
@@ -85,8 +81,7 @@ export async function createKlineMaterializedViews() {
     `);
 
     await pool.query(`
-        DROP MATERIALIZED VIEW IF EXISTS klines_1d CASCADE;
-        CREATE MATERIALIZED VIEW klines_1d
+        CREATE MATERIALIZED VIEW IF NOT EXISTS klines_1d
         WITH (timescaledb.continuous) AS
         SELECT 
             symbol,

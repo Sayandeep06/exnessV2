@@ -18,7 +18,6 @@ class PricePoller{
             try{
                 const binanceEvent: BinanceTradeEvent = JSON.parse(event.data as string);
                 
-                // Transform to our custom format
                 const tradeData: TradeData = {
                     symbol: binanceEvent.s,
                     trade_id: binanceEvent.t,
@@ -45,3 +44,5 @@ class PricePoller{
 }
 
 const poller = new PricePoller();
+
+//need to send current prices to the fe too
