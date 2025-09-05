@@ -11,12 +11,29 @@ interface KlineData {
   volume: number;
 }
 
+interface CandleMessage {
+  type: 'candle';
+  data: {
+    symbol: string;
+    interval: string;
+    timestamp: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    tradeCount: number;
+  };
+}
+
 export default function TradingViewChart() {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const tvWidgetRef = useRef<any>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const [klineData, setKlineData] = useState<KlineData[]>([]);
   const [isScriptLoaded, setIsScriptLoaded] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Connecting...');
+  const [currentInterval, setCurrentInterval] = useState('1m');
 
   // Load TradingView script
   useEffect(() => {
@@ -43,27 +60,36 @@ export default function TradingViewChart() {
   useEffect(() => {
     console.log('Setting up kline WebSocket connection');
     
-    const ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_1m');
+    const ws = new WebSocket('ws://localhost:8080');
     
     ws.onopen = () => {
       console.log('Kline WebSocket connected');
       setConnectionStatus('Connected');
+      
+      // Subscribe to BTCUSDT 1m candles by default
+      ws.send(JSON.stringify({
+        action: 'subscribe',
+        symbol: 'btcusdt',
+        interval: '1m'
+      }));
     };
+
+    wsRef.current = ws;
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const message = JSON.parse(event.data);
         
-        if (data.e === 'kline' && data.k) {
-          const kline = data.k;
+        if (message.type === 'candle' && message.data) {
+          const candle = message.data;
           
           const newKlineData: KlineData = {
-            time: kline.t / 1000, // Convert to seconds for TradingView
-            open: parseFloat(kline.o),
-            high: parseFloat(kline.h),
-            low: parseFloat(kline.l),
-            close: parseFloat(kline.c),
-            volume: parseFloat(kline.v)
+            time: candle.timestamp, // Already in seconds
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume
           };
 
           setKlineData(prev => {
@@ -81,9 +107,13 @@ export default function TradingViewChart() {
             
             return updated.sort((a, b) => a.time - b.time);
           });
+        } else if (message.status) {
+          console.log('Subscription status:', message);
+        } else if (message.error) {
+          console.error('WebSocket error:', message.error);
         }
       } catch (error) {
-        console.error('Error parsing kline data', error);
+        console.error('Error parsing WebSocket message', error);
       }
     };
 
@@ -99,6 +129,7 @@ export default function TradingViewChart() {
 
     return () => {
       ws.close();
+      wsRef.current = null;
     };
   }, []);
 

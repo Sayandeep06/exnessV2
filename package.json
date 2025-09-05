@@ -11,14 +11,12 @@
     "start:engine": "cd apps/engine && bun run index.ts",
     "start:http-server": "cd apps/http-server && bun run index.ts",
     "start:price-poller": "cd apps/price_poller && bun run index.ts",
-    "start:all": "concurrently \"npm run start:engine\" \"npm run start:http-server\" \"npm run start:price-poller\"",
-    "db:studio": "docker run --rm -p 8080:8080 -e ADMINER_DEFAULT_SERVER=host.docker.internal adminer"
+    "start:all": "concurrently \"npm run start:engine\" \"npm run start:http-server\" \"npm run start:price-poller\""
   },
   "devDependencies": {
     "prettier": "^3.6.2",
     "turbo": "^2.5.6",
-    "typescript": "5.9.2",
-    "concurrently": "^8.2.2"
+    "typescript": "5.9.2"
   },
   "engines": {
     "node": ">=18"

@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import type { BinanceTradeEvent, TradeData } from './types';
 import {RedisManager} from './RedisManager'
 
-const wsUrl = 'wss://fstream.binance.com/ws/btcusdt@trade';
+const wsUrl = 'wss://fstream.binance.com/ws/btcusdt@aggTrade';
 
 class PricePoller{
     private ws: WebSocket;
