@@ -1,7 +1,69 @@
 import express from 'express'
-import { pool } from 'db/db'
+import WebSocket from 'ws'
 
 export const klinesRouter = express.Router()
+
+async function getCandlesFromWebSocket(symbol: string, timeframe: string, limit: number = 100): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket('ws://localhost:8080');
+        const candlesData: any[] = [];
+        const timeout = setTimeout(() => {
+            ws.close();
+            reject(new Error('WebSocket timeout'));
+        }, 10000);
+
+        ws.on('open', () => {
+            // Subscribe to candles
+            ws.send(JSON.stringify({
+                action: 'subscribe',
+                symbol: symbol.toLowerCase(),
+                interval: timeframe
+            }));
+        });
+
+        ws.on('message', (data) => {
+            try {
+                const message = JSON.parse(data.toString());
+                
+                if (message.status === 'subscribed') {
+                    // Wait a bit more for candles to arrive
+                    setTimeout(() => {
+                        clearTimeout(timeout);
+                        ws.close();
+                        resolve(candlesData.slice(-limit)); // Return last 'limit' candles
+                    }, 2000);
+                } else if (message.type === 'candle') {
+                    const candle = message.data;
+                    candlesData.push({
+                        timestamp: candle.timestamp,
+                        open: Math.floor(candle.open * 100000000),
+                        high: Math.floor(candle.high * 100000000),
+                        low: Math.floor(candle.low * 100000000),
+                        close: Math.floor(candle.close * 100000000),
+                        volume: Math.floor(candle.volume),
+                        decimal: 8
+                    });
+                }
+            } catch (error) {
+                clearTimeout(timeout);
+                ws.close();
+                reject(error);
+            }
+        });
+
+        ws.on('error', (error) => {
+            clearTimeout(timeout);
+            reject(error);
+        });
+
+        ws.on('close', () => {
+            clearTimeout(timeout);
+            if (candlesData.length === 0) {
+                reject(new Error('No candles received'));
+            }
+        });
+    });
+}
 
 klinesRouter.get('/candles', async (req, res) => {
     try {
@@ -12,51 +74,12 @@ klinesRouter.get('/candles', async (req, res) => {
         }
 
         const symbol = asset.toString()
-        const timeframe = ts || '1m'
-        
-        let tableName = 'klines_1m'
-        if (timeframe === '5m') tableName = 'klines_5m'
-        else if (timeframe === '1h') tableName = 'klines_1h'
-        else if (timeframe === '1d') tableName = 'klines_1d'
+        const timeframe = (ts || '1m').toString()
 
-        let query = `
-            SELECT 
-                EXTRACT(EPOCH FROM bucket)::bigint as timestamp,
-                (open * 100000000)::bigint as open,
-                (high * 100000000)::bigint as high, 
-                (low * 100000000)::bigint as low,
-                (close * 100000000)::bigint as close,
-                volume::bigint as volume,
-                8 as decimal
-            FROM ${tableName}
-            WHERE symbol = $1
-        `
-        
-        const params = [symbol]
-        
-        if (startTime && endTime) {
-            query += ` AND bucket >= to_timestamp($2) AND bucket <= to_timestamp($3)`
-            params.push(startTime.toString(), endTime.toString())
-        } else {
-            query += ` ORDER BY bucket DESC LIMIT 100`
-        }
-        
-        query += ` ORDER BY bucket ASC`
-
-        const result = await pool.query(query, params)
-        
-        const candles = result.rows.map(row => ({
-            timestamp: row.timestamp,
-            open: row.open,
-            high: row.high,
-            low: row.low,
-            close: row.close,
-            volume: row.volume,
-            decimal: row.decimal
-        }))
+        const candles = await getCandlesFromWebSocket(symbol, timeframe, 100);
 
         res.status(200).json({ candles })
-        console.log(candles)
+        console.log(`Received ${candles.length} candles from WebSocket`)
         
     } catch (error) {
         console.error('Error fetching klines:', error)

@@ -1,5 +1,5 @@
 export interface BinanceTradeEvent {
-    e: string;           // Event type ("trade")
+    e: string;           // Event type ("aggTrade")
     E: number;           // Event time
     s: string;           // Symbol
     t: number;           // Trade ID
