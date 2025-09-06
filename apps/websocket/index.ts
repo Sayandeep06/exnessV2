@@ -1,6 +1,7 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { CandleService, type Candle } from './CandleService';
 import { engine } from '../engine/index';
+import { createClient, type RedisClientType } from 'redis';
 
 interface SubscriptionMessage {
     action: 'subscribe' | 'unsubscribe';
@@ -77,17 +78,24 @@ class WebSocketManager {
     private subscriptions: Map<string, ClientSubscription[]> = new Map();
     private intervalTimers: Map<string, NodeJS.Timeout> = new Map();
     private supportedIntervals = ['1m', '5m', '1h', '1d'];
+    private redisClient: RedisClientType;
+    private latestPrices: Map<string, any> = new Map();
 
     constructor(private port: number = 3492) {
         this.wss = new WebSocketServer({ port });
         this.candleService = new CandleService();
+        this.redisClient = createClient();
         this.init();
     }
 
     private async init() {
         try {
+            await this.redisClient.connect();
+            console.log('WebSocket Redis client connected');
+            
             this.setupWebSocketServer();
             this.startPeriodicCandleUpdates();
+            this.startPricePoller();
             
             console.log(`WebSocket server running on port ${this.port}`);
         } catch (error) {
@@ -300,33 +308,61 @@ class WebSocketManager {
     
     private startTradingUpdates() {
         setInterval(() => {
-            
-            this.broadcastPriceUpdates();
-            
-            
+            // Broadcast position updates for subscribed users
             this.broadcastPositionUpdates();
         }, 1000); 
     }
     
-    private broadcastPriceUpdates() {
-        const prices = engine.getAllPrices();
-        
-        for (const [symbol, priceData] of prices.entries()) {
-            const priceUpdate: PriceUpdateResponse = {
-                type: 'price_update',
-                data: {
-                    symbol: priceData.symbol,
-                    bid: priceData.bid,
-                    ask: priceData.ask,
-                    mid: (priceData.bid + priceData.ask) / 2,
-                    spread: priceData.spread,
-                    timestamp: priceData.timestamp
+    private startPricePoller() {
+        // Continuously poll Redis for new price data from price poller
+        const pollPrices = async () => {
+            try {
+                const priceMessage = await this.redisClient.rPop('prices');
+                if (priceMessage) {
+                    const tradeData = JSON.parse(priceMessage);
+                    const spread = 100; // $100 spread
+                    
+                    const priceUpdate = {
+                        symbol: tradeData.symbol,
+                        price: tradeData.price,
+                        bid: tradeData.price - spread/2,
+                        ask: tradeData.price + spread/2,
+                        spread: spread,
+                        quantity: tradeData.quantity,
+                        timestamp: tradeData.event_time
+                    };
+                    
+                    // Store latest price
+                    this.latestPrices.set(tradeData.symbol, priceUpdate);
+                    
+                    // Broadcast to WebSocket clients
+                    this.broadcastPriceUpdate(priceUpdate);
                 }
-            };
+            } catch (error) {
+                console.error('Error polling prices from Redis:', error);
+            }
             
-            
-            this.broadcastToAllClients(priceUpdate);
-        }
+            // Poll every 100ms
+            setTimeout(pollPrices, 100);
+        };
+        
+        pollPrices();
+    }
+
+    private broadcastPriceUpdate(priceData: any) {
+        const priceUpdate: PriceUpdateResponse = {
+            type: 'price_update',
+            data: {
+                symbol: priceData.symbol,
+                bid: priceData.bid,
+                ask: priceData.ask,
+                mid: priceData.price,
+                spread: priceData.spread,
+                timestamp: new Date(priceData.timestamp)
+            }
+        };
+        
+        this.broadcastToAllClients(priceUpdate);
     }
     
     
