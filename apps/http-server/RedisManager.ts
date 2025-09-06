@@ -26,7 +26,7 @@ export class RedisClient{
 
     public publishSubscribe(message: string){
         const id = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        return new Promise<string>((resolve)=>{
+        return new Promise<any>((resolve)=>{
             this.subscriber.subscribe(id, (message)=>{
                 this.subscriber.unsubscribe(id)
                 resolve(JSON.parse(message))
@@ -34,5 +34,6 @@ export class RedisClient{
             this.publisher.lPush("ToEngine", JSON.stringify({id, message}))
         })
     }
+
 
 }

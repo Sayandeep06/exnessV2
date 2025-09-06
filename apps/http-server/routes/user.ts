@@ -1,18 +1,21 @@
 import express from 'express'
 import z from 'zod'
 import jwt from 'jsonwebtoken'
+import { RedisClient } from '../RedisManager'
 
 export const userRouter = express.Router()
 
 const signupSchema = z.object({
-    email: z.email(),
+    username: z.string().min(3),
+    email: z.string().email(),
     password: z.string().min(6)
 })
 
 const signinSchema = z.object({
-    email: z.email(),
+    username: z.string(),
     password: z.string()
 })
+
 
 const users: any[] = []
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
@@ -27,28 +30,54 @@ userRouter.post('/signup', async (req, res) => {
             })
         }
 
-        const existingUser = users.find(u => u.email === data.data.email)
+        const existingUser = users.find(u => u.username === data.data.username || u.email === data.data.email)
         if (existingUser) {
             return res.status(403).json({
-                message: "Error while signing up"
+                message: "User already exists"
             })
         }
 
-        const userId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        
+        const userId = users.length + 2; 
+        
         const newUser = {
-            id: userId,
+            userId: userId,
+            username: data.data.username,
             email: data.data.email,
             password: data.data.password,
-            usdBalance: 500000
+            usdBalance: 10000 
         }
         
         users.push(newUser)
 
+        
+        const redisClient = RedisClient.getInstance()
+        const createUserMessage = {
+            action: 'create_user',
+            data: {
+                userId: userId,
+                username: data.data.username,
+                email: data.data.email,
+                startingBalance: 10000
+            }
+        }
+        
+        try {
+            await redisClient.publishSubscribe(JSON.stringify(createUserMessage))
+        } catch (engineError) {
+            console.error('Failed to create user in engine:', engineError)
+            
+        }
+
         res.status(200).json({
-            userId: userId
+            success: true,
+            userId: userId,
+            username: data.data.username,
+            message: "User created successfully"
         })
         
     } catch (error) {
+        console.error('Signup error:', error)
         res.status(403).json({
             message: "Error while signing up"
         })
@@ -65,7 +94,7 @@ userRouter.post('/signin', async (req, res) => {
             })
         }
 
-        const user = users.find(u => u.email === data.data.email && u.password === data.data.password)
+        const user = users.find(u => u.username === data.data.username && u.password === data.data.password)
         
         if (!user) {
             return res.status(403).json({
@@ -74,15 +103,23 @@ userRouter.post('/signin', async (req, res) => {
         }
 
         const token = jwt.sign({
-            userId: user.id,
+            userId: user.userId,
+            username: user.username,
             email: user.email
         }, JWT_SECRET, { expiresIn: '24h' })
 
         res.status(200).json({
-            token: token
+            success: true,
+            token: token,
+            user: {
+                userId: user.userId,
+                username: user.username,
+                email: user.email
+            }
         })
         
     } catch (error) {
+        console.error('Signin error:', error)
         res.status(403).json({
             message: "Incorrect credentials"
         })

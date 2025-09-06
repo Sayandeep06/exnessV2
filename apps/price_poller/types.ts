@@ -1,15 +1,15 @@
 export interface BinanceTradeEvent {
-    e: string;           // Event type ("aggTrade")
-    E: number;           // Event time
-    s: string;           // Symbol
-    t: number;           // Trade ID
-    p: string;           // Price
-    q: string;           // Quantity
-    b: number;           // Buyer order ID
-    a: number;           // Seller order ID
-    T: number;           // Trade time
-    m: boolean;          // Is buyer maker
-    M: boolean;          // Ignore
+    e: string;           
+    E: number;           
+    s: string;           
+    t: number;           
+    p: string;           
+    q: string;           
+    b: number;           
+    a: number;           
+    T: number;           
+    m: boolean;          
+    M: boolean;          
 }
 
 export interface TradeData {
