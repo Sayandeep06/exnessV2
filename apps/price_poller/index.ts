@@ -44,5 +44,3 @@ class PricePoller{
 }
 
 const poller = new PricePoller();
-
-//need to send current prices to the fe too

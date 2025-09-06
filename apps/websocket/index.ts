@@ -1,16 +1,20 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { CandleService, type Candle } from './CandleService';
+import { engine } from '../engine/index';
 
 interface SubscriptionMessage {
     action: 'subscribe' | 'unsubscribe';
     symbol: string;
-    interval?: string; // '1m', '5m', '1h', '1d'
+    interval?: string; 
+    type?: 'candles' | 'positions' | 'orders'; 
 }
 
 interface ClientSubscription {
     ws: WebSocket;
     symbol: string;
     interval: string;
+    type: 'candles' | 'positions' | 'orders';
+    userId?: number; 
 }
 
 interface CandleResponse {
@@ -28,6 +32,44 @@ interface CandleResponse {
     };
 }
 
+interface PositionUpdateResponse {
+    type: 'position_update';
+    data: {
+        positionId: string;
+        symbol: string;
+        side: 'long' | 'short';
+        margin: number;
+        current_price: number;
+        unrealized_pnl: number;
+        roi_percentage: number;
+        margin_ratio: number;
+        status: string;
+    };
+}
+
+interface PriceUpdateResponse {
+    type: 'price_update';
+    data: {
+        symbol: string;
+        bid: number;
+        ask: number;
+        mid: number;
+        spread: number;
+        timestamp: Date;
+    };
+}
+
+interface LiquidationResponse {
+    type: 'liquidation';
+    data: {
+        positionId: string;
+        symbol: string;
+        liquidation_price: number;
+        margin_lost: number;
+        reason: string;
+    };
+}
+
 
 class WebSocketManager {
     private wss: WebSocketServer;
@@ -36,7 +78,7 @@ class WebSocketManager {
     private intervalTimers: Map<string, NodeJS.Timeout> = new Map();
     private supportedIntervals = ['1m', '5m', '1h', '1d'];
 
-    constructor(port: number = 8080) {
+    constructor(private port: number = 3492) {
         this.wss = new WebSocketServer({ port });
         this.candleService = new CandleService();
         this.init();
@@ -47,7 +89,7 @@ class WebSocketManager {
             this.setupWebSocketServer();
             this.startPeriodicCandleUpdates();
             
-            console.log(`WebSocket server running on port 8080`);
+            console.log(`WebSocket server running on port ${this.port}`);
         } catch (error) {
             console.error('Failed to initialize WebSocket server:', error);
         }
@@ -80,13 +122,13 @@ class WebSocketManager {
     }
 
     private cleanupClientSubscriptions(ws: WebSocket) {
-        // Remove this client from all subscriptions
+        
         for (const [subscriptionKey, subs] of this.subscriptions.entries()) {
             const index = subs.findIndex(sub => sub.ws === ws);
             if (index !== -1) {
                 subs.splice(index, 1);
                 
-                // Clean up empty subscriptions
+                
                 if (subs.length === 0) {
                     this.subscriptions.delete(subscriptionKey);
                     const timer = this.intervalTimers.get(subscriptionKey);
@@ -102,7 +144,21 @@ class WebSocketManager {
     private async handleSubscription(ws: WebSocket, message: SubscriptionMessage) {
         const symbol = message.symbol.toLowerCase();
         const interval = message.interval || '1m';
+        const type = message.type || 'candles';
 
+        
+        if (type === 'candles') {
+            await this.handleCandleSubscription(ws, message, symbol, interval);
+        } else if (type === 'positions' || type === 'orders') {
+            await this.handleTradingSubscription(ws, message, symbol, type);
+        } else {
+            ws.send(JSON.stringify({ 
+                error: `Unsupported subscription type: ${type}` 
+            }));
+        }
+    }
+    
+    private async handleCandleSubscription(ws: WebSocket, message: SubscriptionMessage, symbol: string, interval: string) {
         if (symbol !== 'btcusdt') {
             ws.send(JSON.stringify({ 
                 error: 'Only BTCUSDT is supported currently' 
@@ -120,15 +176,15 @@ class WebSocketManager {
         const subscriptionKey = `${symbol}_${interval}`;
 
         if (message.action === 'subscribe') {
-            // Add subscription
+            
             if (!this.subscriptions.has(subscriptionKey)) {
                 this.subscriptions.set(subscriptionKey, []);
             }
             
-            const subscription: ClientSubscription = { ws, symbol, interval };
+            const subscription: ClientSubscription = { ws, symbol, interval, type: 'candles' };
             this.subscriptions.get(subscriptionKey)!.push(subscription);
 
-            // Start interval timer if not exists
+            
             if (!this.intervalTimers.has(subscriptionKey)) {
                 this.startIntervalUpdates(symbol, interval);
             }
@@ -136,21 +192,22 @@ class WebSocketManager {
             ws.send(JSON.stringify({ 
                 status: 'subscribed', 
                 symbol: symbol.toUpperCase(),
-                interval 
+                interval,
+                type: 'candles'
             }));
             
-            // Send recent candles immediately
+            
             await this.sendRecentCandles(ws, symbol, interval);
             
         } else if (message.action === 'unsubscribe') {
-            // Remove subscription
+            
             const subs = this.subscriptions.get(subscriptionKey);
             if (subs) {
-                const index = subs.findIndex(sub => sub.ws === ws);
+                const index = subs.findIndex(sub => sub.ws === ws && sub.type === 'candles');
                 if (index !== -1) {
                     subs.splice(index, 1);
                     
-                    // Clean up if no more subscribers
+                    
                     if (subs.length === 0) {
                         this.subscriptions.delete(subscriptionKey);
                         const timer = this.intervalTimers.get(subscriptionKey);
@@ -165,13 +222,67 @@ class WebSocketManager {
             ws.send(JSON.stringify({ 
                 status: 'unsubscribed', 
                 symbol: symbol.toUpperCase(),
-                interval
+                interval,
+                type: 'candles'
+            }));
+        }
+    }
+    
+    private async handleTradingSubscription(ws: WebSocket, message: SubscriptionMessage, symbol: string, type: 'positions' | 'orders') {
+        
+        const userId = (message as any).userId;
+        if (!userId) {
+            ws.send(JSON.stringify({ 
+                error: 'userId is required for position/order subscriptions' 
+            }));
+            return;
+        }
+        
+        const subscriptionKey = `trading_${type}_${userId}`;
+
+        if (message.action === 'subscribe') {
+            if (!this.subscriptions.has(subscriptionKey)) {
+                this.subscriptions.set(subscriptionKey, []);
+            }
+            
+            const subscription: ClientSubscription = { 
+                ws, 
+                symbol, 
+                interval: '1s', 
+                type, 
+                userId: parseInt(userId) 
+            };
+            this.subscriptions.get(subscriptionKey)!.push(subscription);
+
+            ws.send(JSON.stringify({ 
+                status: 'subscribed', 
+                type,
+                userId
+            }));
+            
+        } else if (message.action === 'unsubscribe') {
+            const subs = this.subscriptions.get(subscriptionKey);
+            if (subs) {
+                const index = subs.findIndex(sub => sub.ws === ws && sub.type === type);
+                if (index !== -1) {
+                    subs.splice(index, 1);
+                    
+                    if (subs.length === 0) {
+                        this.subscriptions.delete(subscriptionKey);
+                    }
+                }
+            }
+
+            ws.send(JSON.stringify({ 
+                status: 'unsubscribed', 
+                type,
+                userId
             }));
         }
     }
 
     private startPeriodicCandleUpdates() {
-        // Update all active subscriptions every 30 seconds
+        
         setInterval(async () => {
             for (const [subscriptionKey, subs] of this.subscriptions.entries()) {
                 if (subs.length > 0) {
@@ -181,19 +292,113 @@ class WebSocketManager {
                     }
                 }
             }
-        }, 30000); // 30 seconds
+        }, 30000); 
+        
+        
+        this.startTradingUpdates();
+    }
+    
+    private startTradingUpdates() {
+        setInterval(() => {
+            
+            this.broadcastPriceUpdates();
+            
+            
+            this.broadcastPositionUpdates();
+        }, 1000); 
+    }
+    
+    private broadcastPriceUpdates() {
+        const prices = engine.getAllPrices();
+        
+        for (const [symbol, priceData] of prices.entries()) {
+            const priceUpdate: PriceUpdateResponse = {
+                type: 'price_update',
+                data: {
+                    symbol: priceData.symbol,
+                    bid: priceData.bid,
+                    ask: priceData.ask,
+                    mid: (priceData.bid + priceData.ask) / 2,
+                    spread: priceData.spread,
+                    timestamp: priceData.timestamp
+                }
+            };
+            
+            
+            this.broadcastToAllClients(priceUpdate);
+        }
+    }
+    
+    
+    private feedPricesToTradingEngine(candle: Candle, interval: string) {
+        if (interval === '1m') { 
+            const symbol = candle.symbol.toUpperCase();
+            engine.updatePriceFromExternalSource(symbol, candle.close, 100); 
+        }
+    }
+    
+    private broadcastPositionUpdates() {
+        
+        for (const [subscriptionKey, subs] of this.subscriptions.entries()) {
+            const candleSubs = subs.filter(sub => sub.type === 'positions');
+            
+            if (candleSubs.length > 0) {
+                for (const sub of candleSubs) {
+                    if (sub.userId) {
+                        const positions = engine.getUserPositions(sub.userId);
+                        const openPositions = positions.filter(pos => pos.status === 'open');
+                        
+                        for (const position of openPositions) {
+                            const positionUpdate: PositionUpdateResponse = {
+                                type: 'position_update',
+                                data: {
+                                    positionId: position.positionId,
+                                    symbol: position.symbol,
+                                    side: position.side,
+                                    margin: position.margin,
+                                    current_price: position.current_price,
+                                    unrealized_pnl: position.unrealized_pnl,
+                                    roi_percentage: position.roi_percentage,
+                                    margin_ratio: position.margin_ratio,
+                                    status: position.status
+                                }
+                            };
+                            
+                            if (sub.ws.readyState === WebSocket.OPEN) {
+                                sub.ws.send(JSON.stringify(positionUpdate));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private broadcastToAllClients(message: any) {
+        const messageStr = JSON.stringify(message);
+        
+        for (const [_, subs] of this.subscriptions.entries()) {
+            for (const sub of subs) {
+                if (sub.ws.readyState === WebSocket.OPEN) {
+                    sub.ws.send(messageStr);
+                } else {
+                    
+                    this.cleanupClientSubscriptions(sub.ws);
+                }
+            }
+        }
     }
 
     private startIntervalUpdates(symbol: string, interval: string) {
         const subscriptionKey = `${symbol}_${interval}`;
         
-        // Set different update frequencies based on interval
+        
         let updateFrequency: number;
         switch (interval) {
-            case '1m': updateFrequency = 15000; break;  // 15 seconds
-            case '5m': updateFrequency = 60000; break;  // 1 minute  
-            case '1h': updateFrequency = 300000; break; // 5 minutes
-            case '1d': updateFrequency = 1800000; break; // 30 minutes
+            case '1m': updateFrequency = 15000; break;  
+            case '5m': updateFrequency = 60000; break;  
+            case '1h': updateFrequency = 300000; break; 
+            case '1d': updateFrequency = 1800000; break; 
             default: updateFrequency = 30000;
         }
 
@@ -209,7 +414,7 @@ class WebSocketManager {
             const candles = await this.candleService.getRecentCandles(interval, 100);
             const recentCandles = candles
                 .filter(c => c.symbol.toLowerCase() === symbol)
-                .slice(-50) // Send last 50 candles
+                .slice(-50) 
                 .map(candle => this.formatCandle(candle, interval));
 
             for (const candle of recentCandles) {
@@ -242,8 +447,8 @@ class WebSocketManager {
     }
 
     private formatCandle(candle: Candle, interval?: string): CandleResponse {
-        return {
-            type: 'candle',
+        const candleResponse: CandleResponse = {
+            type: 'candle' as const,
             data: {
                 symbol: candle.symbol.toUpperCase(),
                 interval: interval || candle.interval,
@@ -256,6 +461,11 @@ class WebSocketManager {
                 tradeCount: candle.trade_count
             }
         };
+        
+        
+        this.feedPricesToTradingEngine(candle, interval || candle.interval);
+        
+        return candleResponse;
     }
 
 
@@ -266,18 +476,18 @@ class WebSocketManager {
             if (sub.ws.readyState === WebSocket.OPEN) {
                 sub.ws.send(messageStr);
             } else {
-                // Remove dead connections
+                
                 subs.splice(index, 1);
             }
         });
     }
 
     public close() {
-        // Clear all timers
+        
         this.intervalTimers.forEach(timer => clearInterval(timer));
         this.intervalTimers.clear();
         
-        // Close WebSocket server
+        
         this.wss.close();
         
         console.log('WebSocket server closed');

@@ -1,133 +1,113 @@
 "use client";
 
-import TradingViewChart from "./chart/TradingViewChart";
-import BTCMarketData from "./trading/BTCMarketData";
-import OrderPanel from "./trading/OrderPanel";
-import InstrumentsPanel from "./trading/InstrumentsPanel";
-import TestConnection from "./TestConnection";
-import SimpleWebSocketTest from "./SimpleWebSocketTest";
+import { useState, useEffect } from 'react';
+import TradingViewChart from './chart/TradingViewChart';
+import TradingPanel from './trading/TradingPanel';
+import PositionsPanel from './trading/PositionsPanel';
+import PriceDisplay from './trading/PriceDisplay';
+import TimeFrameSelector from './chart/TimeFrameSelector';
 
 export default function TradingInterface() {
+  const [currentPrice, setCurrentPrice] = useState<number>(0);
+  const [selectedTimeframe, setSelectedTimeframe] = useState('5m');
+  const [positions, setPositions] = useState<any[]>([]);
+  const [balance, setBalance] = useState({ total: 10000, available: 9000, margin_used: 1000 });
+  const [wsConnected, setWsConnected] = useState(false);
+
   return (
-    <div className="flex flex-col h-screen bg-gray-900 text-white font-sans">
-      {/* Top Header */}
-      <header className="flex justify-between items-center px-5 py-3 bg-gray-800 border-b border-gray-700 min-h-[60px]">
-        <div className="flex items-center gap-8">
-          <h1 className="text-xl font-semibold text-yellow-500 m-0">exness</h1>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-400">🇺🇸</span>
-              <span className="text-gray-300">XAU/USD</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1 bg-orange-500 rounded text-sm font-medium">
+    <div className="h-screen bg-gray-900 text-white overflow-hidden">
+      
+      <header className="flex justify-between items-center px-4 py-2 bg-gray-800 border-b border-gray-700 h-14">
+        <div className="flex items-center gap-6">
+          <h1 className="text-xl font-bold text-yellow-500">exness</h1>
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2 px-3 py-1 bg-orange-500 rounded">
               <span>₿</span>
-              <span>BTC</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-400">🇯🇵</span>
-              <span className="text-gray-300">USD/JPY</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-400">🇪🇺</span>
-              <span className="text-gray-300">EUR/USD</span>
+              <span>BTC/USD</span>
             </div>
           </div>
         </div>
         
         <div className="flex items-center gap-4">
-          <BTCMarketData />
+          <PriceDisplay 
+            price={currentPrice} 
+            onChange={24.5}
+            onPriceUpdate={setCurrentPrice}
+          />
           <div className="flex items-center gap-4 text-sm">
             <span className="text-blue-400">Demo</span>
-            <span className="text-white">9,997.21 USD</span>
-            <button className="text-gray-400 hover:text-white">⚙️</button>
-            <button className="text-gray-400 hover:text-white">⏰</button>
-            <button className="text-gray-400 hover:text-white">📊</button>
-            <button className="text-gray-400 hover:text-white">👤</button>
-            <button className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
-              Deposit
-            </button>
+            <span className="text-white">${balance.total.toLocaleString()}</span>
+            <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <span className="text-xs">{wsConnected ? 'Connected' : 'Disconnected'}</span>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left Instruments Panel */}
-        <div className="w-80 border-r border-gray-700">
-          <InstrumentsPanel />
-        </div>
-
-        {/* Center Chart Area */}
+      
+      <div className="flex h-[calc(100vh-3.5rem)]">
+        
         <div className="flex-1 flex flex-col">
-          {/* Chart Header */}
-          <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
-            <div className="flex items-center justify-between">
+          
+          <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 h-12">
+            <div className="flex items-center justify-between h-full">
               <div className="flex items-center gap-4">
-                <h3 className="text-white font-medium">Bitcoin vs US Dollar • 1 •</h3>
-                <BTCMarketData showDetails={false} />
+                <h3 className="text-white font-medium">Bitcoin vs US Dollar</h3>
+                <PriceDisplay 
+                  price={currentPrice} 
+                  onChange={24.5} 
+                  showDetails={false}
+                  onPriceUpdate={setCurrentPrice}
+                />
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <button className="text-gray-400 hover:text-white px-2 py-1">1m</button>
-                <button className="text-gray-400 hover:text-white px-2 py-1">5m</button>
-                <button className="text-gray-400 hover:text-white px-2 py-1">15m</button>
-                <button className="text-gray-400 hover:text-white px-2 py-1">1h</button>
-                <button className="text-gray-400 hover:text-white px-2 py-1">4h</button>
-                <button className="text-gray-400 hover:text-white px-2 py-1">1d</button>
-              </div>
+              <TimeFrameSelector 
+                selected={selectedTimeframe}
+                onChange={setSelectedTimeframe}
+              />
             </div>
           </div>
           
-          {/* Chart */}
+          
           <div className="flex-1 bg-gray-900">
-            <TradingViewChart />
+            <TradingViewChart 
+              selectedTimeframe={selectedTimeframe}
+              onTimeframeChange={setSelectedTimeframe}
+              onPriceUpdate={setCurrentPrice}
+              onConnectionChange={setWsConnected}
+            />
           </div>
         </div>
 
-        {/* Right Trading Panel */}
-        <div className="w-80 border-l border-gray-700 flex flex-col">
-          <OrderPanel />
-          <div className="p-4">
-            <SimpleWebSocketTest />
-            <TestConnection />
-          </div>
+        
+        <div className="w-80 border-l border-gray-700 flex flex-col bg-gray-800">
+          <TradingPanel 
+            currentPrice={currentPrice}
+            balance={balance}
+            onBalanceUpdate={setBalance}
+            onPositionUpdate={setPositions}
+          />
         </div>
       </div>
 
-      {/* Bottom Panel */}
+      
       <div className="h-48 bg-gray-800 border-t border-gray-700">
-        <div className="flex border-b border-gray-700">
-          <button className="px-4 py-3 bg-transparent border-none text-yellow-500 text-sm border-b-2 border-yellow-500 font-medium">
-            Open
-          </button>
-          <button className="px-4 py-3 bg-transparent border-none text-gray-400 text-sm border-b-2 border-transparent hover:text-white transition-all duration-200">
-            Pending
-          </button>
-          <button className="px-4 py-3 bg-transparent border-none text-gray-400 text-sm border-b-2 border-transparent hover:text-white transition-all duration-200">
-            Closed
-          </button>
-        </div>
-        <div className="flex-1 p-4 overflow-hidden">
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center text-gray-400">
-              <div className="text-4xl mb-2">💼</div>
-              <div className="text-sm">No open positions</div>
-            </div>
-          </div>
-        </div>
+        <PositionsPanel 
+          positions={positions}
+          onPositionsUpdate={setPositions}
+        />
       </div>
 
-      {/* Bottom Status Bar */}
-      <div className="bg-gray-800 border-t border-gray-700 px-4 py-2 text-xs text-gray-400 flex items-center justify-between">
+      
+      <div className="bg-gray-800 border-t border-gray-700 px-4 py-1 text-xs text-gray-400 h-8 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <span>Equity: 9,997.21 USD</span>
-          <span>Free Margin: 9,997.21 USD</span>
-          <span>Balance: 9,997.21 USD</span>
-          <span>Margin: 0.00 USD</span>
-          <span>Margin level: —</span>
+          <span>Equity: ${(balance.total + positions.reduce((sum, pos) => sum + (pos.unrealized_pnl || 0), 0)).toLocaleString()}</span>
+          <span>Free Margin: ${balance.available.toLocaleString()}</span>
+          <span>Balance: ${balance.total.toLocaleString()}</span>
+          <span>Margin: ${balance.margin_used.toLocaleString()}</span>
+          <span>Margin level: {balance.margin_used > 0 ? ((balance.total / balance.margin_used) * 100).toFixed(0) + '%' : '—'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-          <span>Connected</span>
+          <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+          <span>{wsConnected ? 'Connected' : 'Disconnected'}</span>
         </div>
       </div>
     </div>
